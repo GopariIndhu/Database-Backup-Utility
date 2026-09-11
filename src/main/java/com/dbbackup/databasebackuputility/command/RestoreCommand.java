@@ -5,6 +5,7 @@ import com.dbbackup.databasebackuputility.model.DatabaseType;
 import com.dbbackup.databasebackuputility.service.MySqlRestoreService;
 import com.dbbackup.databasebackuputility.service.PostgreSqlRestoreService;
 import com.dbbackup.databasebackuputility.service.MongoDbRestoreService;
+import com.dbbackup.databasebackuputility.service.SqliteRestoreService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -170,11 +171,17 @@ public class RestoreCommand implements Callable<Integer> {
 
                 case SQLITE -> {
 
-                    System.err.println(
-                            "SQLite restore is not implemented yet."
+                    System.out.println(
+                            "Starting SQLite restore..."
                     );
 
-                    return 1;
+                    SqliteRestoreService service =
+                            new SqliteRestoreService();
+
+                    service.restore(
+                            backupFile,
+                            database
+                    );
                 }
             }
 

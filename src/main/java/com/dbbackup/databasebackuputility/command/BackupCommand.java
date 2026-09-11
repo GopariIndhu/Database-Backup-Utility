@@ -6,6 +6,7 @@ import com.dbbackup.databasebackuputility.service.CompressionService;
 import com.dbbackup.databasebackuputility.service.MongoDbBackupService;
 import com.dbbackup.databasebackuputility.service.MySqlBackupService;
 import com.dbbackup.databasebackuputility.service.PostgreSqlBackupService;
+import com.dbbackup.databasebackuputility.service.SqliteBackupService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -159,11 +160,15 @@ public class BackupCommand implements Callable<Integer> {
 
                 case SQLITE -> {
 
-                    System.err.println(
-                            "SQLite backup is not implemented yet."
+                    System.out.println(
+                            "Starting SQLite backup..."
                     );
 
-                    return 1;
+                    SqliteBackupService backupService =
+                            new SqliteBackupService();
+
+                    backupFile =
+                            backupService.backup(config);
                 }
 
                 default -> throw new IllegalStateException(
