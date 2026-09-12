@@ -2,9 +2,9 @@ package com.dbbackup.databasebackuputility.command;
 
 import com.dbbackup.databasebackuputility.model.DatabaseConfig;
 import com.dbbackup.databasebackuputility.model.DatabaseType;
+import com.dbbackup.databasebackuputility.service.MongoDbRestoreService;
 import com.dbbackup.databasebackuputility.service.MySqlRestoreService;
 import com.dbbackup.databasebackuputility.service.PostgreSqlRestoreService;
-import com.dbbackup.databasebackuputility.service.MongoDbRestoreService;
 import com.dbbackup.databasebackuputility.service.SqliteRestoreService;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -45,7 +45,8 @@ public class RestoreCommand implements Callable<Integer> {
 
     @Option(
             names = "--password",
-            interactive = true
+            interactive = true,
+            arity = "0..1"
     )
     private char[] password;
 
@@ -59,13 +60,13 @@ public class RestoreCommand implements Callable<Integer> {
     @Option(
             names = "--file",
             required = true,
-            description = "Backup file (.sql or .sql.gz)"
+            description = "Backup file"
     )
     private Path backupFile;
 
     @Option(
             names = "--source-database",
-            description = "Original MongoDB database name stored in the backup"
+            description = "Original MongoDB database name stored in backup"
     )
     private String sourceDatabase;
 
@@ -73,6 +74,17 @@ public class RestoreCommand implements Callable<Integer> {
     public Integer call() {
 
         int resolvedPort = resolvePort();
+
+        if ((databaseType == DatabaseType.MYSQL
+                || databaseType == DatabaseType.POSTGRESQL)
+                && (username == null || username.isBlank())) {
+
+            System.err.println(
+                    "--username is required for " + databaseType
+            );
+
+            return 2;
+        }
 
         DatabaseConfig config =
                 new DatabaseConfig(
@@ -84,7 +96,8 @@ public class RestoreCommand implements Callable<Integer> {
                         database
                 );
 
-        long start = System.currentTimeMillis();
+        long start =
+                System.currentTimeMillis();
 
         try {
 
@@ -96,13 +109,16 @@ public class RestoreCommand implements Callable<Integer> {
                     "Target database: " + database
             );
 
-            System.out.println(
-                    "Host: " + host
-            );
+            if (databaseType != DatabaseType.SQLITE) {
 
-            System.out.println(
-                    "Port: " + resolvedPort
-            );
+                System.out.println(
+                        "Host: " + host
+                );
+
+                System.out.println(
+                        "Port: " + resolvedPort
+                );
+            }
 
             System.out.println(
                     "Backup file: "
@@ -149,7 +165,8 @@ public class RestoreCommand implements Callable<Integer> {
                             || sourceDatabase.isBlank()) {
 
                         System.err.println(
-                                "--source-database is required for MongoDB restore."
+                                "--source-database is required "
+                                        + "for MongoDB restore."
                         );
 
                         return 2;
@@ -186,15 +203,19 @@ public class RestoreCommand implements Callable<Integer> {
             }
 
             long elapsed =
-                    System.currentTimeMillis() - start;
+                    System.currentTimeMillis()
+                            - start;
 
             System.out.println();
+
             System.out.println(
                     "Restore completed successfully."
             );
 
             System.out.println(
-                    "Time taken: " + elapsed + " ms"
+                    "Time taken: "
+                            + elapsed
+                            + " ms"
             );
 
             return 0;
@@ -202,6 +223,7 @@ public class RestoreCommand implements Callable<Integer> {
         } catch (Exception e) {
 
             System.err.println();
+
             System.err.println(
                     "Restore failed."
             );
@@ -215,7 +237,11 @@ public class RestoreCommand implements Callable<Integer> {
         } finally {
 
             if (password != null) {
-                Arrays.fill(password, '\0');
+
+                Arrays.fill(
+                        password,
+                        '\0'
+                );
             }
         }
     }

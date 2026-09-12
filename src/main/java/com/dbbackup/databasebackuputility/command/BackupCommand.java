@@ -2,6 +2,7 @@ package com.dbbackup.databasebackuputility.command;
 
 import com.dbbackup.databasebackuputility.model.DatabaseConfig;
 import com.dbbackup.databasebackuputility.model.DatabaseType;
+import com.dbbackup.databasebackuputility.service.BackupVerificationService;
 import com.dbbackup.databasebackuputility.service.CompressionService;
 import com.dbbackup.databasebackuputility.service.MongoDbBackupService;
 import com.dbbackup.databasebackuputility.service.MySqlBackupService;
@@ -31,7 +32,8 @@ public class BackupCommand implements Callable<Integer> {
 
     @Option(
             names = "--host",
-            defaultValue = "localhost"
+            defaultValue = "localhost",
+            description = "Database host"
     )
     private String host;
 
@@ -42,20 +44,23 @@ public class BackupCommand implements Callable<Integer> {
     private Integer port;
 
     @Option(
-            names = "--username"
+            names = "--username",
+            description = "Database username"
     )
     private String username;
 
     @Option(
             names = "--password",
             interactive = true,
-            arity = "0..1"
+            arity = "0..1",
+            description = "Database password"
     )
     private char[] password;
 
     @Option(
             names = "--database",
-            required = true
+            required = true,
+            description = "Database name or SQLite database file"
     )
     private String database;
 
@@ -65,11 +70,23 @@ public class BackupCommand implements Callable<Integer> {
     )
     private boolean compress;
 
+    @Option(
+            names = "--verify",
+            description = "Restore the backup to a temporary database and verify it"
+    )
+    private boolean verify;
+
     @Override
     public Integer call() {
 
         int resolvedPort = resolvePort();
 
+        /*
+         * MySQL and PostgreSQL require a username
+         * in the current implementation.
+         *
+         * MongoDB and SQLite do not.
+         */
         if ((databaseType == DatabaseType.MYSQL
                 || databaseType == DatabaseType.POSTGRESQL)
                 && (username == null || username.isBlank())) {
@@ -102,18 +119,28 @@ public class BackupCommand implements Callable<Integer> {
                     "Database: " + database
             );
 
-            System.out.println(
-                    "Host: " + host
-            );
+            /*
+             * Host and port are not meaningful
+             * for a local SQLite database file.
+             */
+            if (databaseType != DatabaseType.SQLITE) {
 
-            System.out.println(
-                    "Port: " + resolvedPort
-            );
+                System.out.println(
+                        "Host: " + host
+                );
+
+                System.out.println(
+                        "Port: " + resolvedPort
+                );
+            }
 
             System.out.println();
 
             Path backupFile;
 
+            /*
+             * Select the correct backup implementation.
+             */
             switch (databaseType) {
 
                 case MYSQL -> {
@@ -151,6 +178,10 @@ public class BackupCommand implements Callable<Integer> {
                     MongoDbBackupService backupService =
                             new MongoDbBackupService();
 
+                    /*
+                     * MongoDB handles its own gzip compression
+                     * through mongodump --gzip.
+                     */
                     backupFile =
                             backupService.backup(
                                     config,
@@ -178,8 +209,11 @@ public class BackupCommand implements Callable<Integer> {
             }
 
             /*
-             * MongoDB already uses mongodump --gzip,
-             * so don't compress it again.
+             * MySQL, PostgreSQL and SQLite use our
+             * Java CompressionService.
+             *
+             * MongoDB is excluded because mongodump
+             * already performs gzip compression.
              */
             if (compress
                     && databaseType != DatabaseType.MONGODB) {
@@ -196,6 +230,10 @@ public class BackupCommand implements Callable<Integer> {
                                 backupFile
                         );
 
+                /*
+                 * Delete the uncompressed backup only
+                 * after compression succeeds.
+                 */
                 Files.deleteIfExists(
                         backupFile
                 );
@@ -204,10 +242,6 @@ public class BackupCommand implements Callable<Integer> {
                         compressedFile;
             }
 
-            long elapsed =
-                    System.currentTimeMillis()
-                            - startTime;
-
             System.out.println();
 
             System.out.println(
@@ -215,8 +249,39 @@ public class BackupCommand implements Callable<Integer> {
             );
 
             System.out.println(
-                    "Backup file: " + backupFile
+                    "Backup file: "
+                            + backupFile.toAbsolutePath()
             );
+
+            /*
+             * Optional automatic verification.
+             */
+            if (verify) {
+
+                System.out.println();
+
+                System.out.println(
+                        "Verifying backup..."
+                );
+
+                BackupVerificationService verificationService =
+                        new BackupVerificationService();
+
+                verificationService.verify(
+                        config,
+                        backupFile
+                );
+
+                System.out.println(
+                        "Backup verification successful."
+                );
+            }
+
+            long elapsed =
+                    System.currentTimeMillis()
+                            - startTime;
+
+            System.out.println();
 
             System.out.println(
                     "Time taken: "
@@ -231,7 +296,7 @@ public class BackupCommand implements Callable<Integer> {
             System.err.println();
 
             System.err.println(
-                    "Backup failed."
+                    "Backup or verification failed."
             );
 
             System.err.println(
@@ -242,6 +307,9 @@ public class BackupCommand implements Callable<Integer> {
 
         } finally {
 
+            /*
+             * Clear the password from memory when possible.
+             */
             if (password != null) {
 
                 Arrays.fill(
